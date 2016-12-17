@@ -53,6 +53,7 @@ def index():
 
 
 @app.route("/profile/<email>")
+@login_required
 def profile(email):
     user = User.query.filter_by(email=email).first()
     return render_template("profile.html", user=user)
