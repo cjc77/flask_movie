@@ -1,37 +1,60 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask import render_template, request, redirect, url_for
+from flask.ext.security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
 import secret
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:" + secret.pswd + "@localhost"
+app.config["SECRET_KEY"] = "super-secret"
+app.config["SECURITY_REGISTERABLE"] = True
 app.debug = True
 db = SQLAlchemy(app)
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True)
-    email = db.Column(db.String(120), unique=True)
 
-    def __init__(self, username, email):
-        self.username = username
-        self.email = email
+# Define models
 
-    def __repr__(self):
-        return "<User %r>" % self.username
+roles_users = db.Table("roles_users",
+                       db.Column("user_id", db.Integer(), db.ForeignKey("user.id")),
+                       db.Column("role_id", db.Integer(), db.ForeignKey("role.id")))
+
+
+class Role(db.Model, RoleMixin):
+    id = db.Column(db.Integer(), primary_key=True)
+    name = db.Column(db.String(80), unique=True)
+    description = db.Column(db.String(255))
+
+
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer(), primary_key=True)
+    email = db.Column(db.String(80), unique=True)
+    password = db.Column(db.String(255))
+    active = db.Column(db.Boolean())
+    confirmed_at = db.Column(db.DateTime())
+    roles = db.relationship("Role", secondary=roles_users,
+                            backref=db.backref("users", lazy="dynamic"))
+
+# Setup Flask-Security
+user_datastore = SQLAlchemyUserDatastore(db, User, Role)
+security = Security(app, user_datastore)
+
+# Create a user to test with --- Don't run after first use or error will happen
+
+# @app.before_first_request
+# def create_user():
+#     db.create_all()
+#     user_datastore.create_user(email="test123@testemail.com", password="password")
+#     db.session.commit()
 
 
 @app.route("/")
 def index():
-    all_users = User.query.all()
-    # Find a user by ID
-    first_user = User.query.get(1)
-    return render_template("add_user.html", all_users=all_users, first_user=first_user)
+    return render_template("add_user.html")
 
 
-@app.route("/profile/<username>")
-def profile(username):
-    user = User.query.filter_by(username=username).first()
+@app.route("/profile/<email>")
+def profile(email):
+    user = User.query.filter_by(email=email).first()
     return render_template("profile.html", user=user)
 
 
